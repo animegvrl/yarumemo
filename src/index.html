@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>yarumemo</title>
+    <style>
+        html
+        {
+            color-scheme: dark light;
+            font-family: monospace;
+            font-size: 24px;
+
+            @media(prefers-color-scheme: dark)
+            {
+                color: #dedede;
+            }
+        }
+
+        *, *::before, *::after
+        {
+            margin: 0;
+            box-sizing: border-box;
+            pointer-events: none; /* disable interaction until mouse support is added */
+        }
+
+        input[type="checkbox"]
+        {
+            width: 1rem;
+            height: 1rem;
+        }
+
+        th, td
+        {
+            border: 1px solid #808080;
+            padding: 0 10px 0 10px;
+        }
+
+        .highlight-task
+        {
+            color: #000;
+            background: #fec5e5;
+        }
+
+        article.page_container
+        {
+            display: flex;
+            width: 100%;
+            height: 100dvh;
+            justify-content: center;
+            align-items: safe center;
+        }
+
+        table.task_table
+        {
+            border-collapse: collapse;
+            max-width: 50dvw;
+        }
+    </style>
+</head>
+<body>
+    <article class="page_container">
+        <table class="task_table">
+            <thead>
+                <tr>
+                    <th scope="col">idx</th>
+                    <th scope="col"></th>
+                    <th scope="col">priority</th>
+                    <th scope="col">task</th>
+                </tr>
+            </thead>
+            <tbody id="task-list"></tbody>
+        </table>
+    </article>
+
+    <script type="module">
+        const tasks = [];
+
+        const SCROLL_MARGIN = 155; // about 5 tasks above and below
+        const taskList = {
+            elm: document.querySelector("#task-list"),
+            selectedTask: { id: null, idx: null },
+
+            async initializeOrUpdate()
+            {
+                this.elm.innerHTML = "";
+                tasks.splice(0, tasks.length);
+
+                const res = await fetch(`${location.origin}/list`,
+                    { headers: { 'Accept': 'application/json' } }
+                );
+                if (!res.ok) throw new Error(`HTTP ${res.status} HANDLE ERROR LATER!`);
+
+                let idx = -1;
+                for(const task of await res.json())
+                {
+                    tasks.push({
+                        ...task,
+                        idx: ++idx,
+                        elm: this.render(task, idx),
+                    });
+                }
+
+                if(tasks.length <= 0) return;
+
+                this.select(this.selectedTask);
+            },
+            render(task, idx)
+            {
+                const { id, done, priority, task: taskDescription } = task;
+
+                const taskRowElement = document.createElement("tr");
+                taskRowElement.setAttribute("id", id);
+                taskRowElement.innerHTML = `
+                    <td data-entry="idx">${idx}</td>
+                    <td>
+                        <input
+                            data-entry="done"
+                            type="checkbox"
+                            ${done ? "checked" : ""}
+                        ></input>
+                    </td>
+                    <td data-entry="priority">${priority}</td>
+                    <td data-entry="task">${taskDescription}</td>
+                `;
+
+                this.elm.appendChild(taskRowElement);
+
+                return taskRowElement;
+            },
+            select({ id = null, idx = null } = {})
+            {
+                const previouslySelectedTask = tasks.find(
+                    (task) => task.id === this.selectedTask.id
+                )?.elm;
+                if(previouslySelectedTask) previouslySelectedTask.classList.remove("highlight-task");
+
+                let taskToSelectIdx = id !== null ? tasks.findIndex((task) => task.id === id)
+                                   : idx !== null ? idx
+                                   :                0;
+
+                if(taskToSelectIdx === -1)
+                    taskToSelectIdx = tasks.length - 1 >= idx ? idx
+                                                              : tasks.length - 1;
+
+                tasks[taskToSelectIdx].elm.classList.add("highlight-task");
+                this.selectedTask = { id: tasks[taskToSelectIdx].id, idx: taskToSelectIdx };
+
+                this.scrollIntoView(tasks[taskToSelectIdx].elm);
+            },
+            scrollIntoView(taskElm)
+            {
+                const { top, bottom } = taskElm.getBoundingClientRect();
+
+                if(top - SCROLL_MARGIN < 0)
+                    window.scrollTo({top: window.scrollY + top - SCROLL_MARGIN, behavior: "instant" });
+                else if(bottom + SCROLL_MARGIN > window.innerHeight)
+                    window.scrollTo({top: window.scrollY + bottom - window.innerHeight + SCROLL_MARGIN, behavior: "instant" });
+            },
+            toggle(id)
+            {
+                const taskCheckbox = tasks.find((task) => task.id === id)
+                                          .elm
+                                          .querySelector("[data-entry=\"done\"]");
+
+                taskCheckbox.checked = !taskCheckbox.checked;
+
+                return taskCheckbox.checked;
+            },
+        };
+
+        const navigation = {
+            init()
+            {
+                window.addEventListener("keydown", (event) =>
+                {
+                    switch(event.keyCode)
+                    {
+                        case 32: // Space
+                        {
+                            const currentTaskId = taskList.selectedTask.id;
+
+                            const newState = taskList.toggle(currentTaskId);
+                            updateDoneStatus(
+                                currentTaskId,
+                                newState,
+                            );
+
+                            break;
+                        }
+                        case 38: // Arrow Up
+                        {
+                            if(taskList.selectedTask.idx <= 0)
+                                taskList.select({ idx: tasks.length - 1 });
+                            else
+                                taskList.select({ idx: taskList.selectedTask.idx - 1 });
+                            break;
+                        }
+                        case 40: // Arrow Down
+                        {
+                            if(taskList.selectedTask.idx >= tasks.length - 1)
+                                taskList.select({ idx: 0 });
+                            else
+                                taskList.select({ idx: taskList.selectedTask.idx + 1 });
+                            break;
+                        }
+                        case 68: // d key
+                        {
+                            if(confirm("you sure you want to delete?????") === true)
+                                deleteTask(taskList.selectedTask.id);
+
+                            break;
+                        }
+                        case 69: // e key
+                        {
+                            const task = prompt("task description");
+                            if(task === null) return;
+
+                            updateTaskDescription(
+                                taskList.selectedTask.id,
+                                task,
+                            );
+                            break;
+                        }
+                        case 78: // n key
+                        {
+                            const task = prompt("task description");
+                            if(task === null) return;
+
+                            postTask(task);
+                            break;
+                        }
+                        case 80: // p key
+                        {
+                            const taskPriority = parseInt(prompt("task priority"));
+                            if(isNaN(taskPriority)) return;
+
+                            updatePriority(
+                                taskList.selectedTask.id,
+                                taskPriority,
+                            );
+                            break;
+                        }
+                        default:
+                        {
+                            console.log(event);
+                            return;
+                        }
+                    }
+
+                    event.preventDefault();
+                });
+            },
+        }
+
+        async function updateDoneStatus(taskInternalId, checked)
+        {
+            const res = await fetch(
+                `${location.origin}/task/${taskInternalId}/${checked ? "check" : "uncheck"}`,
+                {
+                    method: 'POST',
+                }
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        }
+
+        async function updatePriority(taskInternalId, priorityValue)
+        {
+            const res = await fetch(
+                `${location.origin}/task/${taskInternalId}/priority/${priorityValue}`,
+                {
+                    method: 'POST',
+                }
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            else await taskList.initializeOrUpdate();
+        }
+
+        async function updateTaskDescription(taskInternalId, newDescription)
+        {
+            const res = await fetch(
+                `${location.origin}/task/${taskInternalId}/task`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task: newDescription }),
+                }
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            else await taskList.initializeOrUpdate();
+        }
+
+        async function deleteTask(taskInternalId, priorityValue)
+        {
+            const res = await fetch(
+                `${location.origin}/task/${taskInternalId}/delete`,
+                {
+                    method: 'POST',
+                }
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            else await taskList.initializeOrUpdate();
+        }
+
+        async function postTask(task)
+        {
+            const res = await fetch(
+                `${location.origin}/task`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task }),
+                }
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            else
+            {
+                await taskList.initializeOrUpdate();
+                taskList.select({ id: (await res.json())[0] });
+            }
+        }
+
+        await taskList.initializeOrUpdate();
+        navigation.init();
+    </script>
+</body>
+</html>
