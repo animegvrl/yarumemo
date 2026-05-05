@@ -2,7 +2,7 @@
 
 A simple keyboard-first todo list (web)app.
 
-### ❗❗❗ very early "usable" development version, everything including keybinds is going to eventually change.
+### ❗❗❗ very early "usable" development version, everything including keybinds is going to eventually change. back up your databases before updating.
 
 ## running yarumemo
 
