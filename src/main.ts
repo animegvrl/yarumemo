@@ -1,88 +1,51 @@
-import { Database } from "bun:sqlite";
+import { validateBody, task, db } from "./db";
 import index from "./index.html";
-
-const db = new Database("todo.sqlite", { create: true });
-db.run("PRAGMA journal_mode = WAL;");
-db.run(`
-    CREATE TABLE IF NOT EXISTS tasks (
-        id       INTEGER PRIMARY KEY,
-        done     INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0,1)),
-        task     TEXT    NOT NULL,
-        priority INTEGER NOT NULL DEFAULT 0
-    );
-`);
-
-interface ITask
-{
-    id?: number;
-    done?: number;
-    task: string;
-    priority?: number;
-}
-
-function validateBody(obj: unknown)
-{
-    if(typeof (obj as any).task === 'string') return obj as ITask;
-    else throw new Error("Missing mandatory field task.");
-}
 
 const server = Bun.serve({
     port: 3001,
     routes: {
         "/": index,
-        "/list": () =>
-        {
-            using query = db.query("SELECT * FROM tasks ORDER BY priority DESC;");
-            return new Response(JSON.stringify(query.all()));
-        },
+        "/list": () => new Response(JSON.stringify(task.queryAll())),
         "/task": {
             POST: async (req) => {
                 const body = validateBody(await req.json());
 
-                using query = db.query("INSERT INTO tasks(task) VALUES ($task) RETURNING *;");
-                const createdEntry = query.values({ $task: body.task })[0];
-
-                return new Response(JSON.stringify(createdEntry));
+                return new Response(JSON.stringify(task.create(body)));
             },
         },
         "/task/:id/task": {
             PUT: async (req) => {
                 const body = validateBody(await req.json());
 
-                using query = db.query("UPDATE tasks SET task = $task WHERE id = $id;");
-                query.values({ $id: req.params.id, $task: body.task });
+                task.updateTask(parseInt(req.params.id), body.task);
 
                 return new Response("OK");
             }
         },
         "/task/:id/priority/:priority": {
             POST: async (req) => {
-                using query = db.query("UPDATE tasks SET priority = $priority WHERE id = $id;");
-                query.values({ $id: req.params.id, $priority: req.params.priority });
+                task.updatePriority(parseInt(req.params.id), parseInt(req.params.priority));
 
                 return new Response("OK");
             }
         },
         "/task/:id/check": {
             POST: async (req) => {
-                using query = db.query("UPDATE tasks SET done = 1 WHERE id = $id;");
-                query.values({ $id: req.params.id });
+                task.updateDone(parseInt(req.params.id), 1);
 
                 return new Response("OK");
             }
         },
         "/task/:id/uncheck": {
             POST: async (req) => {
-                using query = db.query("UPDATE tasks SET done = 0 WHERE id = $id;");
-                query.values({ $id: req.params.id });
+                task.updateDone(parseInt(req.params.id), 0);
 
                 return new Response("OK");
             }
         },
         "/task/:id/delete": {
             POST: async (req) => {
-                using query = db.query("DELETE FROM tasks WHERE id = $id;");
-                query.values({ $id: req.params.id });
+                task.delete(parseInt(req.params.id));
 
                 return new Response("OK");
             }
