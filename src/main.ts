@@ -12,6 +12,20 @@ db.run(`
     );
 `);
 
+interface ITask
+{
+    id?: number;
+    done?: number;
+    task: string;
+    priority?: number;
+}
+
+function validateBody(obj: unknown)
+{
+    if(typeof (obj as any).task === 'string') return obj as ITask;
+    else throw new Error("Missing mandatory field task.");
+}
+
 const server = Bun.serve({
     port: 3001,
     routes: {
@@ -23,7 +37,7 @@ const server = Bun.serve({
         },
         "/task": {
             POST: async (req) => {
-                const body = await req.json();
+                const body = validateBody(await req.json());
 
                 using query = db.query("INSERT INTO tasks(task) VALUES ($task) RETURNING *;");
                 const createdEntry = query.values({ $task: body.task })[0];
@@ -33,7 +47,7 @@ const server = Bun.serve({
         },
         "/task/:id/task": {
             PUT: async (req) => {
-                const body = await req.json();
+                const body = validateBody(await req.json());
 
                 using query = db.query("UPDATE tasks SET task = $task WHERE id = $id;");
                 query.values({ $id: req.params.id, $task: body.task });
@@ -75,7 +89,7 @@ const server = Bun.serve({
         },
     },
 
-    fetch(req) {
+    fetch(_req) {
         return new Response("Not Found", { status: 404 });
     },
 });
@@ -87,7 +101,7 @@ for(const signal of ["beforeExit", "exit", "SIGINT", "SIGTERM", "SIGQUIT"])
     process.on(signal, async () => {
         console.log(`${signal}, stopping server.`);
         await server.stop();
-        await db.close();
+        db.close();
         console.log("bye.");
     });
 }
