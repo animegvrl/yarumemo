@@ -6,14 +6,14 @@ A simple keyboard-first todo list (web)app.
 
 ## running yarumemo
 
-yarumemo uses [bun](https://bun.sh/) to serve html, api and for database operations.
+yarumemo uses [rust](https://rust-lang.org/) to serve html, api and for database operations.
 
 To run yarumemo you have to,
 
-- Download and Install [bun](https://bun.sh/)
-- Run `bun run dev` to launch a local server
+- Download and Install [rust](https://rust-lang.org/)
+- Run `cargo run` to launch a local server
 - Access yarumemo at [http://localhost:3001/](http://localhost:3001/)
-- (additionally if port `3001` is taken on your machine, you have to manually change it in `src/main.ts`)
+- (additionally if port `3001` is taken on your machine, you have to manually change it in `src/main.rs`)
 
 ## keymap
 
