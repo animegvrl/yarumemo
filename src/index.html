@@ -316,7 +316,7 @@
             else
             {
                 await taskList.initializeOrUpdate();
-                taskList.select({ id: (await res.json())[0] });
+                taskList.select({ id: (await res.json()).id });
             }
         }
 
